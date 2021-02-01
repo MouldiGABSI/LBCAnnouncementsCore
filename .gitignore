@@ -35,3 +35,8 @@ Carthage/Build
 # `pod install` in .travis.yml
 #
 # Pods/
+*.xcworkspacedata
+*.xcconfig
+Example/Pods
+Example/LBCAnnouncementsCore.xcworkspace/xcshareddata
+Podfile.lock
