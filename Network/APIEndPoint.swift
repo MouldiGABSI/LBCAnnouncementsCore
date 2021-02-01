@@ -6,3 +6,21 @@
 //
 
 import Foundation
+
+public enum HttpMethod : String {
+    case get     = "GET"
+    case post    = "POST"
+    case delete  = "DELETE"
+    case put     = "PUT"
+    case patch   = "PATCH"
+}
+
+public protocol APIEndPointProtocol {
+    
+    var baseURL: URL { get }
+    var path: String { get }
+    var httpMethod: HttpMethod { get }
+    var task: HTTPTask { get }
+    var headers: HTTPHeaders? { get }
+    
+}
