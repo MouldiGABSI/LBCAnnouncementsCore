@@ -30,7 +30,7 @@ TODO: Add long description of the pod here.
 
   s.ios.deployment_target = '11.0'
 
-  s.source_files = 'LBCAnnouncementsCore/Classes/**/*'
+  s.source_files = 'LBCAnnouncementsCore/**/*'
   
   # s.resource_bundles = {
   #   'LBCAnnouncementsCore' => ['LBCAnnouncementsCore/Assets/*.png']
