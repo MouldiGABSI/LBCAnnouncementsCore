@@ -23,86 +23,120 @@ public enum NetworkResult<String, Int>{
 }
 
 public protocol NetworkRouter: class {
-    associatedtype EndPoint: APIEndPointProtocol
-    func request<N>(_ route: EndPoint) -> Result<N, APIError> where N : Decodable
+    associatedtype EndPoint: APIProtocol
+    func request<N>(_ route: EndPoint, completion: @escaping (Result<N, APIError>) -> Void) where N : Decodable
     func cancel()
 }
 
+public typealias APIProtocol = APIEndPointProtocol & MockAPIProtocol
 
-public class Router<EndPoint: APIEndPointProtocol>: NetworkRouter {
+public class Router<EndPoint: APIProtocol>: NetworkRouter {
     
     public init() {}
     
     private var task: URLSessionTask?
     
-    public func request<N>(_ route: EndPoint) -> Result<N, APIError>  where N : Decodable {
+    public func request<N>(_ route: EndPoint, completion: @escaping (Result<N, APIError>) -> Void) where N : Decodable {
         
-        //var returnedResult = try! Result<N, APIError>()
-        var networkResponse : Result<N,APIError>
+        if let fileName = route.jsonFileName {
+            self.returnMockFrom(fileName: fileName, completion: completion)
+        } else {
+            self.performNetworkRequest(route, completion: completion)
+        }
+        
+    }
+    
+    private func returnMockFrom<N>(fileName: String,  completion: @escaping (Result<N, APIError>) -> Void) where N : Decodable {
+        
+        if let jsonData = JSONFileReader.readFile(fileName) {
+            do {
+                print("readed json  ----> \(jsonData)")
+                let apiResponse = try JSONDecoder().decode(N.self, from: jsonData)
+                completion(.success(apiResponse))
+            }catch {
+                print(error)
+                print("readed json  error ----> \(error)")
+                completion(.failure(APIError(type: .objectMapping, message: NetworkResponse.unableToDecode.rawValue)))
+                
+            }
+        } else {
+            completion(.failure(APIError(type: .objectMapping, message: "Invalid JSON File!")))
+        }
+    }
+    
+    private func performNetworkRequest<N>(_ route: EndPoint, completion: @escaping (Result<N, APIError>) -> Void) where N : Decodable {
+        
+        
         let session = URLSession.shared
         do {
             let request = try self.buildRequest(from: route)
-            NetworkLogger.log(request: request)
-            task = session.dataTask(with: request, completionHandler: { data, response, error in
-                
-                if error != nil {
-                    networkResponse =  .failure(APIError(type: .badRequest, message: "Please check your network connection."))
+            if let _request = request {
+                NetworkLogger.log(request: _request)
+                task = session.dataTask(with: _request, completionHandler: { data, response, error in
                     
-                }
-                
-                if let response = response as? HTTPURLResponse {
-                    let result = self.handleNetworkResponse(response)
-                    switch result {
-                    case .success:
-                        guard let responseData = data else {
-                            if N.self == Void.self {
-                                if let voidResponse = () as? N {
-                                    networkResponse = .success(voidResponse)
-                                }
-                            } else {
-                                networkResponse = .failure(APIError(type: .emptyData, message: "No data returned!"))
-                            }
-                            return
-                        }
-                        do {
-                            print(responseData)
-                            let jsonData = try JSONSerialization.jsonObject(with: responseData, options: .mutableContainers)
-                            print(jsonData)
-                            let apiResponse = try JSONDecoder().decode(N.self, from: responseData)
-                            networkResponse = .success(apiResponse)
-                        }catch {
-                            print(error)
-                            networkResponse = .failure(APIError(type: .objectMapping, message: NetworkResponse.unableToDecode.rawValue))
-                            
-                        }
-                    case .failure(let networkFailureError, let statusCode):
-                        networkResponse = .failure(APIError(type: .networkFailure, message: networkFailureError, code: statusCode))
+                    if error != nil {
+                        completion(.failure(APIError(type: .badRequest, message: "Please check your network connection.")))
                         
                     }
-                }
-                
-            })
+                    
+                    if let response = response as? HTTPURLResponse {
+                        let result = self.handleNetworkResponse(response)
+                        switch result {
+                        case .success:
+                            guard let responseData = data else {
+                                if N.self == Void.self {
+                                    if let voidResponse = () as? N {
+                                        completion(.success(voidResponse))
+                                    }
+                                } else {
+                                    completion(.failure(APIError(type: .emptyData, message: "No data returned!")))
+                                }
+                                return
+                            }
+                            do {
+                                print(responseData)
+                                let jsonData = try JSONSerialization.jsonObject(with: responseData, options: .mutableContainers)
+                                print(jsonData)
+                                let apiResponse = try JSONDecoder().decode(N.self, from: responseData)
+                                completion(.success(apiResponse))
+                            }catch {
+                                print(error)
+                                completion(.failure(APIError(type: .objectMapping, message: NetworkResponse.unableToDecode.rawValue)))
+                                
+                            }
+                        case .failure(let networkFailureError, let statusCode):
+                            completion(.failure(APIError(type: .networkFailure, message: networkFailureError, code: statusCode)))
+                            
+                        }
+                    }
+                    
+                })
+            } else {
+                completion(.failure(APIError(type: .badRequest, message: "empty Request Fields")))
+            }
+            
         }catch {
-            networkResponse = .failure(APIError(type: .badRequest, message: error.localizedDescription))
+            completion(.failure(APIError(type: .badRequest, message: error.localizedDescription)))
         }
         self.task?.resume()
-        
-        return networkResponse
     }
     
     public func cancel() {
         self.task?.cancel()
     }
     
-    fileprivate func buildRequest(from route: EndPoint) throws -> URLRequest {
-        
-        var request = URLRequest(url: route.baseURL.appendingPathComponent(route.path),
+    fileprivate func buildRequest(from route: EndPoint) throws -> URLRequest? {
+        guard let baseURL = route.baseURL, let path = route.path, let httpMethod = route.httpMethod, let task = route.task else {
+            print("empty Request items")
+            return nil
+        }
+        var request = URLRequest(url: baseURL.appendingPathComponent(path),
                                  cachePolicy: .reloadIgnoringLocalAndRemoteCacheData,
                                  timeoutInterval: 10.0)
         
-        request.httpMethod = route.httpMethod.rawValue
+        request.httpMethod = httpMethod.rawValue
         do {
-            switch route.task {
+            switch task {
             case .request:
                 request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             case .requestParameters(let bodyParameters,
