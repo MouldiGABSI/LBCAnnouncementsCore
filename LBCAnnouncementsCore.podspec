@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'LBCAnnouncementsCore'
-  s.version          = '0.1'
+  s.version          = '0.1.2'
   s.summary          = 'A Network Layer to Fetch a list of announcement from a public API'
   s.swift_version    = '4'
 # This description is used to generate tags and improve search results.

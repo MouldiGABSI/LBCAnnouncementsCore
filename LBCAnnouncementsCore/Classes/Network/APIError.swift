@@ -47,3 +47,10 @@ public struct APIError: Error, CustomStringConvertible {
         return self.message
     }
 }
+
+
+extension APIError : Equatable {
+    public static func == (lhs: APIError, rhs: APIError) -> Bool {
+        return lhs.code == rhs.code && lhs.message == rhs.message && lhs.type == rhs.type
+    }
+}
